@@ -177,14 +177,10 @@ echo "======================================"
 
 cd /tmp
 
-if [ "$VERSION_CODENAME" = "jammy" ]; then
-    WKHTML="wkhtmltox_0.12.6.1-3.jammy_amd64.deb"
-elif [ "$VERSION_CODENAME" = "noble" ]; then
-    WKHTML="wkhtmltox_0.12.6.1-3.noble_amd64.deb"
-fi
+WKHTML="wkhtmltox_0.12.6.1-3.jammy_amd64.deb"
 
 if [ ! -f "$WKHTML" ]; then
-    wget "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/$WKHTML"
+    wget "https://ghfast.top/https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/$WKHTML"
 fi
 
 dpkg -i "$WKHTML" || true
