@@ -1,138 +1,217 @@
 #!/bin/bash
 # ==================================================
 # Odoo 环境初始化安装脚本
-# Ubuntu 22.04/24.04
-# PostgreSQL + Python依赖 + wkhtmltopdf
+#
+# 支持:
+#   Ubuntu 22.04 (jammy)
+#   Ubuntu 24.04 (noble)
+#
+# 安装内容:
+#   PostgreSQL
+#   Python 环境
+#   Odoo 依赖
+#   wkhtmltopdf
+#   中文字体
 # ==================================================
 
 set -e
 
+# ==============================
+# 检查 Root 权限
+# ==============================
+if [ "$EUID" -ne 0 ]; then
+    echo "请使用 root 执行:"
+    echo "sudo bash install_odoo_env.sh"
+    exit 1
+fi
+
+# ==============================
+# 获取系统信息
+# ==============================
 echo "======================================"
-echo " 开始安装 Odoo 环境依赖"
+echo "检测系统版本"
 echo "======================================"
 
+source /etc/os-release
 
-# -----------------------------
-# 1. 系统更新
-# -----------------------------
-echo "[1/5] 更新系统..."
+echo "系统名称: $PRETTY_NAME"
+echo "版本代号: $VERSION_CODENAME"
 
-sudo apt update
-sudo apt upgrade -y
+if [ "$ID" != "ubuntu" ]; then
+    echo "当前不是 Ubuntu 系统"
+    exit 1
+fi
 
+case "$VERSION_CODENAME" in
+    jammy)
+        echo "检测到 Ubuntu 22.04"
+        ;;
+    noble)
+        echo "检测到 Ubuntu 24.04"
+        ;;
+    *)
+        echo "不支持的 Ubuntu 版本: $VERSION_CODENAME"
+        exit 1
+        ;;
+esac
 
-# -----------------------------
-# 2. 安装 PostgreSQL
-# -----------------------------
-echo "[2/5] 安装 PostgreSQL..."
+# ==============================
+# 切换阿里云源
+# ==============================
+echo "======================================"
+echo "切换阿里云 APT 源"
+echo "======================================"
 
-sudo apt install postgresql -y
+# Ubuntu 22.04 格式
+if [ -f /etc/apt/sources.list ]; then
+    sed -i 's@http://archive.ubuntu.com/ubuntu@https://mirrors.aliyun.com/ubuntu@g' /etc/apt/sources.list
+    sed -i 's@http://security.ubuntu.com/ubuntu@https://mirrors.aliyun.com/ubuntu@g' /etc/apt/sources.list
+fi
 
+# Ubuntu 24.04 格式
+if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+    cat > /etc/apt/sources.list.d/ubuntu.sources <<EOF
+Types: deb
+URIs: https://mirrors.aliyun.com/ubuntu
+Suites: $VERSION_CODENAME $VERSION_CODENAME-updates $VERSION_CODENAME-backports
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
-echo "配置 PostgreSQL 用户..."
+Types: deb
+URIs: https://mirrors.aliyun.com/ubuntu
+Suites: $VERSION_CODENAME-security
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+fi
+
+apt update
+
+# ==============================
+# 系统更新
+# ==============================
+echo "======================================"
+echo "[1/5] 更新系统"
+echo "======================================"
+
+apt upgrade -y
+
+# ==============================
+# PostgreSQL
+# ==============================
+echo "======================================"
+echo "[2/5] 安装 PostgreSQL"
+echo "======================================"
+
+apt install -y postgresql
+
+echo "创建 Odoo 数据库用户"
 
 sudo -u postgres psql <<EOF
-
 DO \$\$
 BEGIN
     IF NOT EXISTS (
-        SELECT FROM pg_roles WHERE rolname = 'odoo'
-    ) THEN
-        CREATE USER odoo WITH PASSWORD 'qweasdzxc123.';
+        SELECT FROM pg_roles WHERE rolname='odoo'
+    )
+    THEN
+        CREATE USER odoo WITH PASSWORD 'odoo';
     END IF;
 END
 \$\$;
 
 ALTER USER odoo WITH SUPERUSER;
-
 EOF
 
+echo "PostgreSQL 完成"
 
-echo "PostgreSQL 配置完成"
+# ==============================
+# Python 依赖
+# ==============================
+echo "======================================"
+echo "[3/5] 安装 Python 依赖"
+echo "======================================"
 
+apt install -y \
+    python3-pip \
+    build-essential \
+    wget \
+    python3-dev \
+    python3-venv \
+    python3-wheel \
+    libxml2-dev \
+    libxslt1-dev \
+    libzip-dev \
+    libldap2-dev \
+    libpq-dev \
+    libsasl2-dev \
+    python3-setuptools \
+    node-less \
+    nodejs \
+    npm
 
-# -----------------------------
-# 3. Python环境依赖
-# -----------------------------
-echo "[3/5] 安装 Python 和系统依赖..."
+# ==============================
+# wkhtmltopdf 依赖
+# ==============================
+echo "======================================"
+echo "[4/5] 安装 wkhtmltopdf 依赖"
+echo "======================================"
 
-sudo apt install -y \
-python3-pip \
-build-essential \
-wget \
-python3-dev \
-python3-venv \
-python3-wheel \
-libxml2-dev \
-libxslt-dev \
-libzip-dev \
-libldap2-dev \
-libpq-dev \
-libsasl2-dev \
-python3-setuptools \
-node-less \
-nodejs \
-npm
+apt install -y \
+    libxrender1 \
+    libfontconfig1 \
+    libx11-6 \
+    libxext6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxtst6 \
+    libxrandr2 \
+    libxcursor1 \
+    libxi6
 
-
-# -----------------------------
-# 4. wkhtmltopdf依赖
-# -----------------------------
-echo "[4/5] 安装 wkhtmltopdf 依赖..."
-
-sudo apt install -y \
-libxrender1 \
-libfontconfig1 \
-libx11-6 \
-libxext6 \
-libx11-xcb1 \
-libxcb1 \
-libxtst6 \
-libxrandr2 \
-libxcursor1 \
-libxi6
-
-
-# -----------------------------
-# 5. 安装wkhtmltopdf
-# -----------------------------
-echo "[5/5] 安装 wkhtmltopdf..."
-
+# ==============================
+# 安装 wkhtmltopdf
+# ==============================
+echo "======================================"
+echo "[5/5] 安装 wkhtmltopdf"
+echo "======================================"
 
 cd /tmp
 
-
-if [ ! -f wkhtmltox_0.12.6.1-3.jammy_amd64.deb ]; then
-
-wget https://ghfast.top/https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb
-
+if [ "$VERSION_CODENAME" = "jammy" ]; then
+    WKHTML="wkhtmltox_0.12.6.1-3.jammy_amd64.deb"
+elif [ "$VERSION_CODENAME" = "noble" ]; then
+    WKHTML="wkhtmltox_0.12.6.1-3.noble_amd64.deb"
 fi
 
+if [ ! -f "$WKHTML" ]; then
+    wget "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/$WKHTML"
+fi
 
-sudo dpkg -i wkhtmltox_0.12.6.1-3.jammy_amd64.deb || true
+dpkg -i "$WKHTML" || true
+apt --fix-broken install -y
 
+# ==============================
+# 中文字体
+# ==============================
+echo "安装中文字体"
 
-sudo apt --fix-broken install -y
+apt install -y \
+    fonts-wqy-zenhei \
+    fonts-wqy-microhei \
+    xfonts-wqy
 
-
-echo "安装中文字体..."
-
-sudo apt install -y \
-fonts-wqy-zenhei \
-fonts-wqy-microhei \
-xfonts-wqy
-
-
+# ==============================
+# 完成
+# ==============================
 echo ""
 echo "======================================"
-echo " Odoo 环境安装完成"
+echo " Odoo 环境安装完成 "
 echo "======================================"
-
 echo ""
-echo "PostgreSQL:"
-echo " 用户: odoo"
-echo " 密码: qweasdzxc123."
+echo "PostgreSQL 用户:"
+echo "用户名: odoo"
+echo "密码: odoo"
 echo ""
+echo "wkhtmltopdf 版本:"
 
-echo "wkhtmltopdf版本:"
 wkhtmltopdf --version
