@@ -55,36 +55,6 @@ case "$VERSION_CODENAME" in
         ;;
 esac
 
-# ==============================
-# 切换阿里云源
-# ==============================
-echo "======================================"
-echo "切换阿里云 APT 源"
-echo "======================================"
-
-# Ubuntu 22.04 格式
-if [ -f /etc/apt/sources.list ]; then
-    sed -i 's@http://archive.ubuntu.com/ubuntu@https://mirrors.aliyun.com/ubuntu@g' /etc/apt/sources.list
-    sed -i 's@http://security.ubuntu.com/ubuntu@https://mirrors.aliyun.com/ubuntu@g' /etc/apt/sources.list
-fi
-
-# Ubuntu 24.04 格式
-if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-    cat > /etc/apt/sources.list.d/ubuntu.sources <<EOF
-Types: deb
-URIs: https://mirrors.aliyun.com/ubuntu
-Suites: $VERSION_CODENAME $VERSION_CODENAME-updates $VERSION_CODENAME-backports
-Components: main universe restricted multiverse
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-
-Types: deb
-URIs: https://mirrors.aliyun.com/ubuntu
-Suites: $VERSION_CODENAME-security
-Components: main universe restricted multiverse
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-EOF
-fi
-
 apt update
 
 # ==============================
@@ -105,6 +75,9 @@ echo "======================================"
 
 apt install -y postgresql
 
+read -r -s -p "请输入 Odoo 数据库密码: " ODOO_DB_PASSWORD
+echo
+
 echo "创建 Odoo 数据库用户"
 
 sudo -u postgres psql <<EOF
@@ -114,12 +87,12 @@ BEGIN
         SELECT FROM pg_roles WHERE rolname='odoo'
     )
     THEN
-        CREATE USER odoo WITH PASSWORD 'odoo';
+        CREATE USER odoo WITH PASSWORD '$ODOO_DB_PASSWORD';
     END IF;
 END
 \$\$;
 
-ALTER USER odoo WITH SUPERUSER;
+ALTER USER odoo WITH PASSWORD '$ODOO_DB_PASSWORD' SUPERUSER;
 EOF
 
 echo "PostgreSQL 完成"
@@ -206,7 +179,7 @@ echo "======================================"
 echo ""
 echo "PostgreSQL 用户:"
 echo "用户名: odoo"
-echo "密码: odoo"
+echo "密码: 已使用安装时输入的密码"
 echo ""
 echo "wkhtmltopdf 版本:"
 
